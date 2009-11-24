@@ -1,0 +1,21 @@
+name:            starling
+version:         0.0.1
+stability:       Alpha
+
+synopsis:        Haskell bindings for memcached
+description:     Haskell bindings for memcached
+
+category:        Network
+
+license:         BSD3
+license-file:    LICENSE
+author:          Antoine Latter <aslatter@gmail.com>
+maintainer:      Antoine Latter <aslatter@gmail.com>
+
+build-depends:   base, binary, bytestring
+build-type:      Simple
+
+exposed-modules:
+        Network.Starling
+        Network.Starling.Core
+        Network.Starling.Connection
