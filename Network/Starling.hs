@@ -9,8 +9,27 @@ Maintainer: Antoine Latter <aslatter@gmail.com>
 A haskell implementation of the memcahed
 protocol.
 
-This implements the new binary protococl, so
-it only works with version 1.3 and newer.
+This implements the new binary protocol, so
+it only works with memcached version 1.3 and newer.
+
+Example of usage, using the network package to obain
+a handle, and the OverloadedStrings language extension:
+
+> h <- connectTo "filename" $ UnixSocket "filename"
+> hSetBuffering h NoBuffering
+> con <- open h
+
+> set con "hello" "world"
+> get con "hello"
+
+In the above example we connect to a unix socket in the file \"filename\",
+set the key \"hello\" to the value \"world\" and then retrieve the value.
+
+Operations are thread safe - multiple threads of execution may make
+concurrent requests on the memcahced connection.
+
+Operations are blocking, but do not block other concurrent threads
+from placing requests on the connection.
 
 -}
 module Network.Starling
@@ -30,7 +49,7 @@ module Network.Starling
     -- , decrement
     , flush
     , stats
-    , oneStat
+    -- , oneStat -- doesn't seem to work for me
     , version
     ) where
 

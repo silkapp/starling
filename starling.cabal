@@ -2,8 +2,14 @@ name:            starling
 version:         0.0.1
 stability:       Alpha
 
-synopsis:        Haskell bindings for memcached
-description:     Haskell bindings for memcached
+synopsis:        A memcached client
+description:     A haskell memcached client. See http:\/\/memcached.org
+                 for more information.
+                 .
+                 This implements the new binary protocol,
+		 so it only works with memcached version
+                 1.3 and newer.
+homepage:        http://community.haskell.org/~aslatter/code/starling
 
 category:        Network
 
@@ -12,8 +18,12 @@ license-file:    LICENSE
 author:          Antoine Latter <aslatter@gmail.com>
 maintainer:      Antoine Latter <aslatter@gmail.com>
 
+cabal-version:   >= 1.6
+
 build-depends:   base==4.*, binary, bytestring
 build-type:      Simple
+
+extra-source-files: CHANGES
 
 exposed-modules:
         Network.Starling

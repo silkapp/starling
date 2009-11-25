@@ -309,7 +309,6 @@ getResponse h = do
   let resHeader = B.runGet deserialize chunk
       bodyLen = rsHeadTotalLen resHeader
   rest <- BS.hGet h $ fromIntegral bodyLen
-  if BS.length rest /= fromIntegral bodyLen then throw StarlingReadError else do
   return . B.runGet deserialize $ chunk `BS.append` rest
 
 data StarlingReadError = StarlingReadError
