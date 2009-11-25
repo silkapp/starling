@@ -1,11 +1,21 @@
 
 
-{-| A haskell implementation of the memcahed
-  protocol.
+{-|
+
+Module: Network.Starling
+Copyright: Antoine Latter 2009
+Maintainer: Antoine Latter <aslatter@gmail.com>
+
+A haskell implementation of the memcahed
+protocol.
+
+This implements the new binary protococl, so
+it only works with version 1.3 and newer.
 
 -}
 module Network.Starling
     ( open
+    , close
     , Connection
     , set
     , get
@@ -16,8 +26,8 @@ module Network.Starling
     -- , decrement
     , flush
     , stats
+    , oneStat
     , version
-    -- , quit
     ) where
 
 import Network.Starling.Connection
@@ -31,6 +41,7 @@ import Network.Starling.Core hiding
     , decrement
     , flush
     , stat
+    , version
     , quit
     )
 import qualified Network.Starling.Core as Core
@@ -40,40 +51,33 @@ import qualified Data.ByteString.Lazy as BS
 
 type Result a = IO (Either (ResponseStatus, ByteString) a)
 
+-- | Set a value in the cache
 set :: Connection -> Key -> Value -> Result ()
-set con key value
-    = do
-  response <- synchRequest con $ Core.set key value
-  if rsStatus response == Core.NoError
-   then return (Right ())
-   else return $ errorResult response
+set con key value = simpleRequest con (Core.set key value) (const ())
 
-errorResult response = Left (Core.rsStatus response, Core.rsBody response)
-
+-- | Retrive a value from the cache
 get :: Connection -> Key -> Result ByteString
-get con key
-    = do
-  response <- synchRequest con $ Core.get key
-  if rsStatus response == Core.NoError
-   then return (Right $ Core.rsBody response)
-   else return $ errorResult response
+get con key = simpleRequest con (Core.get key) rsBody
 
+-- | Delete an entry in the cache
 delete :: Connection -> Key -> Result ()
-delete con key
-    = do
-  response <- synchRequest con $ Core.delete key
-  if rsStatus response == Core.NoError
-   then return (Right ())
-   else return $ errorResult response
+delete con key = simpleRequest con (Core.delete key) (const ())
 
+-- | Delete all entries in the cache
 flush :: Connection -> Result ()
-flush con
-    = do
-  response <- synchRequest con $ Core.flush
-  if Core.rsStatus response == Core.NoError
-   then return (Right ())
-   else return $ errorResult response
+flush con = simpleRequest con Core.flush (const ())
 
+simpleRequest :: Connection -> Request -> (Response -> a) -> Result a
+simpleRequest con req f
+    = do
+  response <- synchRequest con req
+  if rsStatus response == NoError
+   then return . Right . f $ response
+   else return . errorResult $ response
+
+errorResult response = Left (rsStatus response, rsBody response)
+
+-- | Returns a list of stats about the server in key,value pairs
 stats :: Connection -> Result [(ByteString,ByteString)]
 stats con
     = do
@@ -86,3 +90,13 @@ stats con
       else return $ errorResult resp
  where unpackStats = filter (\(x,y) -> not (BS.null x && BS.null y)) .
                      map (\response -> (rsKey response, rsBody response))
+
+-- | Returns a single stat. Example: 'stat con "pid"' will return
+-- the 
+oneStat :: Connection -> Key -> Result ByteString
+oneStat con key = simpleRequest con (Core.stat $ Just key) rsBody
+
+-- | Returns the version of the server
+version :: Connection -> Result ByteString
+version con = simpleRequest con Core.version rsBody
+

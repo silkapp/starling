@@ -1,4 +1,7 @@
-{-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE
+  RecordWildCards
+  , DeriveDataTypeable
+ #-}
 
 {-|
 
@@ -28,6 +31,8 @@ module Network.Starling.Core
     , addCAS
     , Response(..)
     , getResponse
+    , StarlingReadError(..)
+    , StarlingReadError
     , Serialize(..)
     , Deserialize(..)
     , Opaque
@@ -41,7 +46,9 @@ module Network.Starling.Core
 import System.IO
 
 import Control.Applicative ((<$>))
+import Control.Exception
 import Data.Maybe (fromMaybe)
+import Data.Typeable
 import Data.Word
 import Data.Monoid (mconcat)
 
@@ -294,13 +301,21 @@ instance Deserialize ResponseHeader where
 
 -- | Pulls a reponse to an operation
 -- off of a handle.
+-- May throw a 'StarlingReadError'
 getResponse :: Handle -> IO Response
 getResponse h = do
   chunk <- BS.hGet h 24
+  if BS.length chunk /= 24 then throw StarlingReadError else do
   let resHeader = B.runGet deserialize chunk
       bodyLen = rsHeadTotalLen resHeader
   rest <- BS.hGet h $ fromIntegral bodyLen
+  if BS.length rest /= fromIntegral bodyLen then throw StarlingReadError else do
   return . B.runGet deserialize $ chunk `BS.append` rest
+
+data StarlingReadError = StarlingReadError
+ deriving (Show, Typeable)
+
+instance Exception StarlingReadError
 
 data RqMagic = Request
  deriving (Eq, Ord, Read, Show)

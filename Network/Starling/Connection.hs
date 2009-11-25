@@ -20,10 +20,15 @@ put requests on the connection.
 This should work well where each thread needs one
 request to do it's job.
 
+If you have a good idea for what an asynchronous
+API should look like let me know. It shouldn't be too
+hard to add on to what's already here.
+
 -}
 module Network.Starling.Connection
     ( Connection
     , open
+    , close
     , synchRequest
     , synchRequestMulti
     , ignorantRequest
@@ -34,6 +39,7 @@ import Network.Starling.Core
 import Control.Concurrent (forkIO)
 import Control.Concurrent.Chan
 import Control.Concurrent.MVar
+import Control.Exception (handle)
 import Data.IORef
 
 import System.IO
@@ -52,6 +58,8 @@ data Connection = Conn
     , con_opaque :: IORef Opaque
     }
 
+-- | The connection keeps a queue of callbacks.
+-- These are entries on that queue
 data QItem
     = QDone
     | QHandleResp Opaque (Response -> IO ())
@@ -66,9 +74,11 @@ open h
   lock <- newMVar ()
   queue <- newChan
   opaque <- newIORef 0
-  forkIO $ readLoop h queue
+  forkIO $ flip handle (readLoop h queue) $ \StarlingReadError ->
+      return ()
   return $ Conn lock h queue opaque
-
+           
+-- | Process the callback queue
 readLoop :: Handle -> Chan QItem -> IO ()
 readLoop h q
     = do
@@ -120,6 +130,9 @@ processResponse h q response qItem k
                    f (response : resps)
                    tryNextQItem h q left k
 
+-- | Take many responses off of the queue as long as they
+-- match the passed in senquence. The second returned
+-- value is the response which did not match.
 takeResponses :: Opaque -> Handle -> IO ([Response], Response)
 takeResponses ident h
     = go []
@@ -170,6 +183,17 @@ synchRequestMulti conn req
     return ()
   readMVar result
 
+-- | Shut down the connection.
+-- Non-blocking.
+close :: Connection -> IO ()
+close conn
+    =
+  withConLock conn $ do
+    enqueue conn QDone
+    _ <- putRequest conn quit
+    return ()
+
+-- | Put a request onto the handle
 putRequest :: Connection -> Request -> IO Opaque
 putRequest conn@Conn{..} req
     = do
@@ -178,6 +202,7 @@ putRequest conn@Conn{..} req
   BS.hPut con_h chunk
   return opaque
 
+-- | Grab the next sequence number
 nextOpaque :: Connection -> IO Opaque
 nextOpaque Conn{..} = do
   current <- readIORef con_opaque
@@ -185,6 +210,7 @@ nextOpaque Conn{..} = do
   writeIORef con_opaque next
   return $ next `seq` current
 
+-- | Add an item on the callback queue
 enqueue :: Connection -> QItem -> IO ()
 enqueue Conn{..} item
     = writeChan con_q item
