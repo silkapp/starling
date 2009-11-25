@@ -12,7 +12,7 @@ license-file:    LICENSE
 author:          Antoine Latter <aslatter@gmail.com>
 maintainer:      Antoine Latter <aslatter@gmail.com>
 
-build-depends:   base, binary, bytestring
+build-depends:   base==4.*, binary, bytestring
 build-type:      Simple
 
 exposed-modules:

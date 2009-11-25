@@ -17,6 +17,10 @@ module Network.Starling
     ( open
     , close
     , Connection
+    , Key
+    , Value
+    , Result
+    , ResponseStatus(..)
     , set
     , get
     , delete
