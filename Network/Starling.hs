@@ -43,10 +43,11 @@ module Network.Starling
     , set
     , get
     , delete
-    -- , add
-    -- , replace
-    -- , increment
-    -- , decrement
+    , add
+    , replace
+    , update
+    , increment
+    , decrement
     , flush
     , stats
     -- , oneStat -- doesn't seem to work for me
@@ -71,12 +72,25 @@ import qualified Network.Starling.Core as Core
 
 import Data.ByteString.Lazy (ByteString)
 import qualified Data.ByteString.Lazy as BS
+import qualified Data.Binary.Get as B
+
+import Data.Word
 
 type Result a = IO (Either (ResponseStatus, ByteString) a)
 
 -- | Set a value in the cache
 set :: Connection -> Key -> Value -> Result ()
 set con key value = simpleRequest con (Core.set key value) (const ())
+
+-- | Set a vlue in the cache. Fails if a value is already defined
+-- for the indicated key.
+add :: Connection -> Key -> Value -> Result ()
+add con key value = simpleRequest con (Core.add key value) (const ())
+
+-- | Set a value in the cache. Fails if a value is not already defined
+-- for the indicated key.
+replace :: Connection -> Key -> Value -> Result ()
+replace con key value = simpleRequest con (Core.replace key value) (const ())
 
 -- | Retrive a value from the cache
 get :: Connection -> Key -> Result ByteString
@@ -85,6 +99,45 @@ get con key = simpleRequest con (Core.get key) rsBody
 -- | Delete an entry in the cache
 delete :: Connection -> Key -> Result ()
 delete con key = simpleRequest con (Core.delete key) (const ())
+
+-- | Update a value in the cache. This operation requires two round trips.
+-- This operation can fail if the key is not present in the cache, or if
+-- the value changes in the cache between the two calls.
+-- So watch out! Even if the value exists the operation might
+-- not go through in the face of concurrent access.
+update :: Connection -> Key -> (Value -> Maybe Value) -> Result ()
+update con key f
+    = do
+  response <- synchRequest con (Core.get key)
+  case rsStatus response of
+    NoError ->
+        let oldVal = rsBody response
+            cas = rsCas response
+            baseRequest =
+                 case f oldVal of
+                   Nothing -> Core.delete key
+                   Just newVal -> Core.replace key newVal
+            request = addCAS cas $ baseRequest
+        in simpleRequest con request (const ())
+    _ -> return . errorResult $ response
+
+-- | Increment a value in the cache. The first 'Word64' argument is the
+-- amount by which to increment and the second is the intial value to
+-- use of the key does not yet have a value.
+-- The return value is the updated value in the cache.
+increment :: Connection -> Key -> Word64 -> Word64 -> Result Word64
+increment con key amount init
+    = simpleRequest con (Core.increment key amount init) $ \response ->
+      B.runGet B.getWord64be (rsBody response)
+
+-- | Decrement a value in the cache. The first 'Word64' argument is the
+-- amount by which to decrement and the second is the intial value to
+-- use of the key does not yet have a value.
+-- The return value is the updated value in the cache.
+decrement :: Connection -> Key -> Word64 -> Word64 -> Result Word64
+decrement con key amount init
+    = simpleRequest con (Core.decrement key amount init) $ \response ->
+      B.runGet B.getWord64be (rsBody response)
 
 -- | Delete all entries in the cache
 flush :: Connection -> Result ()
