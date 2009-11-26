@@ -32,7 +32,6 @@ module Network.Starling.Core
     , Response(..)
     , getResponse
     , StarlingReadError(..)
-    , StarlingReadError
     , Serialize(..)
     , Deserialize(..)
     , Opaque
@@ -54,8 +53,6 @@ import Data.Monoid (mconcat)
 
 import Data.ByteString.Lazy (ByteString)
 import qualified Data.ByteString.Lazy as BS
-
-import Data.ByteString.Lazy.Char8()
 
 import qualified Data.Binary.Builder as B
 import qualified Data.Binary.Get as B
