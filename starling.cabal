@@ -1,5 +1,5 @@
 name:            starling
-version:         0.0.3
+version:         0.1.0
 stability:       Alpha
 
 synopsis:        A memcached client
@@ -20,7 +20,7 @@ maintainer:      Antoine Latter <aslatter@gmail.com>
 
 cabal-version:   >= 1.6
 
-build-depends:   base==4.*, binary, bytestring
+build-depends:   base == 4.*, binary, bytestring, transformers == 0.1.*
 build-type:      Simple
 
 extra-source-files: CHANGES

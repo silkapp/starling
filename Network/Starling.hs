@@ -39,6 +39,7 @@ module Network.Starling
     , Key
     , Value
     , Result
+    , ResultM
     , ResponseStatus(..)
     , set
     , get
@@ -76,7 +77,10 @@ import qualified Data.Binary.Get as B
 
 import Data.Word
 
-type Result a = IO (Either (ResponseStatus, ByteString) a)
+import Control.Monad.Trans (liftIO, MonadIO)
+
+type Result a = ResultM IO a
+type ResultM m a = m (Either (ResponseStatus, ByteString) a)
 
 -- | Set a value in the cache
 set :: Connection -> Key -> Value -> Result ()
@@ -105,20 +109,21 @@ delete con key = simpleRequest con (Core.delete key) (const ())
 -- the value changes in the cache between the two calls.
 -- So watch out! Even if the value exists the operation might
 -- not go through in the face of concurrent access.
-update :: Connection -> Key -> (Value -> Maybe Value) -> Result ()
+update :: MonadIO m =>
+          Connection -> Key -> (Value -> m (Maybe Value)) -> ResultM m ()
 update con key f
     = do
-  response <- synchRequest con (Core.get key)
+  response <- liftIO $ synchRequest con (Core.get key)
   case rsStatus response of
-    NoError ->
+    NoError -> do
         let oldVal = rsBody response
             cas = rsCas response
-            baseRequest =
-                 case f oldVal of
-                   Nothing -> Core.delete key
-                   Just newVal -> Core.replace key newVal
+        res <- f oldVal
+        let baseRequest = case res of
+                            Nothing -> Core.delete key
+                            Just newVal -> Core.replace key newVal
             request = addCAS cas $ baseRequest
-        in simpleRequest con request (const ())
+        liftIO $ simpleRequest con request (const ())
     _ -> return . errorResult $ response
 
 -- | Increment a value in the cache. The first 'Word64' argument is the
@@ -164,8 +169,12 @@ stats con
      if rsStatus resp == NoError
       then return . Right . unpackStats $ resps
       else return $ errorResult resp
- where unpackStats = filter (\(x,y) -> not (BS.null x && BS.null y)) .
-                     map (\response -> (rsKey response, rsBody response))
+
+ where
+
+   unpackStats
+       = filter (\(x,y) -> not (BS.null x && BS.null y)) .
+         map (\response -> (rsKey response, rsBody response))
 
 -- | Returns a single stat. Example: 'stat con "pid"' will return
 -- the 

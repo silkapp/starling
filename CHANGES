@@ -1,4 +1,5 @@
  - Added increment/decrement commands
+ - Added add and replace commands
  - Added 'update' operation which allows an atomic
    operation on a cached value
 
