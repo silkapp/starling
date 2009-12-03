@@ -80,6 +80,9 @@ import Data.Word
 import Control.Monad.Trans (liftIO, MonadIO)
 
 type Result a = ResultM IO a
+
+-- | If an operation fails the result will return in 'Left'
+-- with the failure code and a text description of the failure
 type ResultM m a = m (Either (ResponseStatus, ByteString) a)
 
 -- | Set a value in the cache
@@ -109,6 +112,9 @@ delete con key = simpleRequest con (Core.delete key) (const ())
 -- the value changes in the cache between the two calls.
 -- So watch out! Even if the value exists the operation might
 -- not go through in the face of concurrent access.
+--
+-- Testing indicates that if we fail because we could not gaurantee
+-- atomicity the failure code will be 'KeyExists'.
 update :: MonadIO m =>
           Connection -> Key -> (Value -> m (Maybe Value)) -> ResultM m ()
 update con key f
