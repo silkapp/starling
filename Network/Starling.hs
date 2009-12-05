@@ -134,7 +134,7 @@ update con key f
 
 -- | Increment a value in the cache. The first 'Word64' argument is the
 -- amount by which to increment and the second is the intial value to
--- use of the key does not yet have a value.
+-- use if the key does not yet have a value.
 -- The return value is the updated value in the cache.
 increment :: Connection -> Key -> Word64 -> Word64 -> Result Word64
 increment con key amount init
@@ -143,7 +143,7 @@ increment con key amount init
 
 -- | Decrement a value in the cache. The first 'Word64' argument is the
 -- amount by which to decrement and the second is the intial value to
--- use of the key does not yet have a value.
+-- use if the key does not yet have a value.
 -- The return value is the updated value in the cache.
 decrement :: Connection -> Key -> Word64 -> Word64 -> Result Word64
 decrement con key amount init
