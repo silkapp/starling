@@ -1,3 +1,8 @@
+0.1.1
+
+ - Updated Cabal file to point to a real
+   home page
+
 0.1.0
 
  - Added increment/decrement commands
