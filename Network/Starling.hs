@@ -1,4 +1,6 @@
-
+{-# LANGUAGE DeriveDataTypeable,
+      FlexibleContexts
+      #-}
 
 {-|
 
@@ -38,8 +40,7 @@ module Network.Starling
     , Connection
     , Key
     , Value
-    , Result
-    , ResultM
+    , StarlingError(..)
     , ResponseStatus(..)
     , set
     , get
@@ -73,38 +74,53 @@ import qualified Network.Starling.Core as Core
 
 import Data.ByteString.Lazy (ByteString)
 import qualified Data.ByteString.Lazy as BS
+import qualified Data.ByteString.Lazy.Char8 as BS8
 import qualified Data.Binary.Get as B
 
 import Data.Word
+import Data.Typeable
+import Control.Exception (Exception(..))
 
 import Control.Monad.Trans (liftIO, MonadIO)
 
-type Result a = ResultM IO a
+import Control.Failure
 
--- | If an operation fails the result will return in 'Left'
--- with the failure code and a text description of the failure
-type ResultM m a = m (Either (ResponseStatus, ByteString) a)
+-- | An error consists of the error code returned by the
+-- server and a human-readble error string returned by the server.
+data StarlingError = StarlingError ResponseStatus ByteString
+ deriving Typeable
+
+instance Show StarlingError where
+    show (StarlingError err str)
+        = "StarlingError: " ++ show err ++ " " ++ show (BS8.unpack str)
+
+instance Exception StarlingError
 
 -- | Set a value in the cache
-set :: Connection -> Key -> Value -> Result ()
+set :: (MonadIO m, MonadFailure StarlingError m)
+       => Connection -> Key -> Value -> m ()
 set con key value = simpleRequest con (Core.set key value) (const ())
 
 -- | Set a vlue in the cache. Fails if a value is already defined
 -- for the indicated key.
-add :: Connection -> Key -> Value -> Result ()
+add :: (MonadIO m, MonadFailure StarlingError m) =>
+       Connection -> Key -> Value -> m ()
 add con key value = simpleRequest con (Core.add key value) (const ())
 
 -- | Set a value in the cache. Fails if a value is not already defined
 -- for the indicated key.
-replace :: Connection -> Key -> Value -> Result ()
+replace :: (MonadIO m, MonadFailure StarlingError m) =>
+           Connection -> Key -> Value -> m ()
 replace con key value = simpleRequest con (Core.replace key value) (const ())
 
 -- | Retrive a value from the cache
-get :: Connection -> Key -> Result ByteString
+get :: (MonadIO m, MonadFailure StarlingError m) =>
+       Connection -> Key -> m ByteString
 get con key = simpleRequest con (Core.get key) rsBody
 
 -- | Delete an entry in the cache
-delete :: Connection -> Key -> Result ()
+delete :: (MonadIO m, MonadFailure StarlingError m) =>
+          Connection -> Key -> m ()
 delete con key = simpleRequest con (Core.delete key) (const ())
 
 -- | Update a value in the cache. This operation requires two round trips.
@@ -115,8 +131,8 @@ delete con key = simpleRequest con (Core.delete key) (const ())
 --
 -- Testing indicates that if we fail because we could not gaurantee
 -- atomicity the failure code will be 'KeyExists'.
-update :: MonadIO m =>
-          Connection -> Key -> (Value -> m (Maybe Value)) -> ResultM m ()
+update :: (MonadIO m, MonadFailure StarlingError m) =>
+          Connection -> Key -> (Value -> m (Maybe Value)) -> m ()
 update con key f
     = do
   response <- liftIO $ synchRequest con (Core.get key)
@@ -129,14 +145,15 @@ update con key f
                             Nothing -> Core.delete key
                             Just newVal -> Core.replace key newVal
             request = addCAS cas $ baseRequest
-        liftIO $ simpleRequest con request (const ())
-    _ -> return . errorResult $ response
+        simpleRequest con request (const ())
+    _ -> errorResult response
 
 -- | Increment a value in the cache. The first 'Word64' argument is the
 -- amount by which to increment and the second is the intial value to
 -- use if the key does not yet have a value.
 -- The return value is the updated value in the cache.
-increment :: Connection -> Key -> Word64 -> Word64 -> Result Word64
+increment :: (MonadIO m, MonadFailure StarlingError m) =>
+             Connection -> Key -> Word64 -> Word64 -> m Word64
 increment con key amount init
     = simpleRequest con (Core.increment key amount init) $ \response ->
       B.runGet B.getWord64be (rsBody response)
@@ -145,36 +162,40 @@ increment con key amount init
 -- amount by which to decrement and the second is the intial value to
 -- use if the key does not yet have a value.
 -- The return value is the updated value in the cache.
-decrement :: Connection -> Key -> Word64 -> Word64 -> Result Word64
+decrement :: (MonadIO m, MonadFailure StarlingError m) =>
+             Connection -> Key -> Word64 -> Word64 -> m Word64
 decrement con key amount init
     = simpleRequest con (Core.decrement key amount init) $ \response ->
       B.runGet B.getWord64be (rsBody response)
 
 -- | Delete all entries in the cache
-flush :: Connection -> Result ()
+flush :: (MonadIO m, MonadFailure StarlingError m) =>
+         Connection -> m ()
 flush con = simpleRequest con Core.flush (const ())
 
-simpleRequest :: Connection -> Request -> (Response -> a) -> Result a
+simpleRequest :: (MonadIO m, MonadFailure StarlingError m) =>
+                 Connection -> Request -> (Response -> a) -> m a
 simpleRequest con req f
     = do
-  response <- synchRequest con req
+  response <- liftIO $ synchRequest con req
   if rsStatus response == NoError
-   then return . Right . f $ response
-   else return . errorResult $ response
+   then return . f $ response
+   else errorResult response
 
-errorResult response = Left (rsStatus response, rsBody response)
+errorResult response = failure $ StarlingError (rsStatus response) (rsBody response)
 
 -- | Returns a list of stats about the server in key,value pairs
-stats :: Connection -> Result [(ByteString,ByteString)]
+stats :: (MonadIO m, MonadFailure StarlingError m) =>
+         Connection -> m [(ByteString,ByteString)]
 stats con
     = do
-  resps <- synchRequestMulti con $ Core.stat Nothing
+  resps <- liftIO $ synchRequestMulti con $ Core.stat Nothing
   if null resps then error "fatal error in Network.Starling.stats"
    else do
      let resp = head resps
      if rsStatus resp == NoError
-      then return . Right . unpackStats $ resps
-      else return $ errorResult resp
+      then return . unpackStats $ resps
+      else errorResult resp
 
  where
 
@@ -184,10 +205,12 @@ stats con
 
 -- | Returns a single stat. Example: 'stat con "pid"' will return
 -- the 
-oneStat :: Connection -> Key -> Result ByteString
+oneStat :: (MonadIO m, MonadFailure StarlingError m) =>
+           Connection -> Key -> m ByteString
 oneStat con key = simpleRequest con (Core.stat $ Just key) rsBody
 
 -- | Returns the version of the server
-version :: Connection -> Result ByteString
+version :: (MonadIO m, MonadFailure StarlingError m) =>
+           Connection -> m ByteString
 version con = simpleRequest con Core.version rsBody
 

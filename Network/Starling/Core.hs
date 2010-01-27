@@ -211,7 +211,8 @@ instance Serialize Request where
 -- defaults. The opcode field is left undefined.
 baseRequest :: Request
 baseRequest
-    = Req { rqMagic = Request
+    = Req { rqOp = undefined
+          , rqMagic = Request
           , rqKey = BS.empty
           , rqExtras = BS.empty
           , rqDataType = RawData
@@ -346,7 +347,9 @@ data ResponseStatus
     | IncrDecrOnNonNumeric
     | UnknownCommand
     | OutOfMemory
- deriving (Eq, Ord, Read, Show)
+ deriving (Eq, Ord, Read, Show, Typeable)
+
+instance Exception ResponseStatus
 
 instance Deserialize ResponseStatus where
     deserialize = do
