@@ -5,7 +5,7 @@
 {-|
 
 Module: Network.Starling
-Copyright: Antoine Latter 2009
+Copyright: Antoine Latter 2009-2010
 Maintainer: Antoine Latter <aslatter@gmail.com>
 
 A haskell implementation of the memcahed
@@ -54,6 +54,11 @@ module Network.Starling
     , stats
     -- , oneStat -- doesn't seem to work for me
     , version
+    , listAuthMechanisms
+    , auth
+    , AuthMechanism
+    , AuthData
+    , AuthCallback(..)
     ) where
 
 import Network.Starling.Connection
@@ -69,6 +74,9 @@ import Network.Starling.Core hiding
     , stat
     , version
     , quit
+    , listAuthMechanisms
+    , startAuth
+    , stepAuth
     )
 import qualified Network.Starling.Core as Core
 
@@ -208,6 +216,43 @@ stats con
 oneStat :: (MonadIO m, MonadFailure StarlingError m) =>
            Connection -> Key -> m ByteString
 oneStat con key = simpleRequest con (Core.stat $ Just key) rsBody
+
+-- | List allowed SASL mechanisms. The server must support SASL
+-- authentication.
+listAuthMechanisms :: (MonadIO m, MonadFailure StarlingError m) =>
+                      Connection -> m [AuthMechanism]
+listAuthMechanisms con
+    = simpleRequest con Core.listAuthMechanisms (BS8.words . rsBody)
+
+-- | Some authentications require mutliple back and forths between the
+-- client and the server. This type encapsulates that.
+data AuthCallback m = AuthCallback (ByteString -> m (AuthData, Maybe (AuthCallback m)))
+
+-- | SASL authenitcation. Multi-step authentication is supported by un-folding
+-- the passed-in AuthCallback. Returns 'True' if authentication is supported
+-- and complete. If the supplied callback completes while there are still steps
+-- remaining we throw FurtherAuthRequired.
+auth :: (MonadIO m, MonadFailure StarlingError m) =>
+        Connection -> AuthMechanism -> AuthData -> Maybe (AuthCallback m) -> m Bool
+auth con mech auth authCallback
+    = auth' Core.startAuth con mech auth authCallback
+
+auth' req con mech auth authCallback = do
+  response <- liftIO $ synchRequest con $ req mech auth
+  case rsStatus response of
+    NoError -> return True
+    AuthRequired -> return False
+    FurtherAuthRequired
+        -> do
+      case authCallback of
+        Nothing -> errorResult response
+        Just (AuthCallback f) -> do
+                           next <- f (rsBody response)
+                           case next of
+                             (newAuth, newCallback)
+                                     -> auth' Core.stepAuth con mech newAuth newCallback
+    _ -> errorResult response
+        
 
 -- | Returns the version of the server
 version :: (MonadIO m, MonadFailure StarlingError m) =>

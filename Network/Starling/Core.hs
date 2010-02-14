@@ -27,6 +27,11 @@ module Network.Starling.Core
     , noop
     , version
     , stat
+    , listAuthMechanisms
+    , startAuth
+    , stepAuth
+    , AuthMechanism
+    , AuthData
     , addOpaque
     , addCAS
     , Response(..)
@@ -154,6 +159,23 @@ prepend key value
 -- of responses.
 stat :: Maybe Key -> Request
 stat mkey = request Stat BS.empty (fromMaybe BS.empty mkey) BS.empty
+
+-- | List SASL authenitication mechanisms, space delimeted
+listAuthMechanisms :: Request
+listAuthMechanisms = request ListAuthMechanisms BS.empty BS.empty BS.empty
+
+-- | Begin SASL authentication. May return the further auth
+-- required error if further steps are needed.
+startAuth :: AuthMechanism -> AuthData -> Request
+startAuth mech auth = request StartAuth BS.empty mech auth
+
+-- | Continue SASL authentication. May return the further
+-- aut required error if further steps are needed.
+stepAuth :: AuthMechanism -> AuthData -> Request
+stepAuth mech auth = request StepAuth BS.empty mech auth
+
+type AuthMechanism = ByteString
+type AuthData = ByteString
 
 -- | Add an opaque marker to a request.
 -- This is returned unchanged in the corresponding
@@ -345,6 +367,8 @@ data ResponseStatus
     | InvalidArguments
     | ItemNotStored
     | IncrDecrOnNonNumeric
+    | AuthRequired
+    | FurtherAuthRequired
     | UnknownCommand
     | OutOfMemory
  deriving (Eq, Ord, Read, Show, Typeable)
@@ -362,6 +386,8 @@ instance Deserialize ResponseStatus where
         0x0004 -> InvalidArguments
         0x0005 -> ItemNotStored
         0x0006 -> IncrDecrOnNonNumeric
+        0x0020 -> AuthRequired
+        0x0021 -> FurtherAuthRequired
         0x0081 -> UnknownCommand
         0x0082 -> OutOfMemory
 
@@ -393,6 +419,9 @@ data OpCode
     | FlushQ
     | AppendQ
     | PrependQ
+    | ListAuthMechanisms
+    | StartAuth
+    | StepAuth
  deriving (Eq, Ord, Read, Show)
 
 instance Serialize OpCode where
@@ -423,6 +452,9 @@ instance Serialize OpCode where
     serialize FlushQ = B.singleton 0x18
     serialize AppendQ = B.singleton 0x19
     serialize PrependQ = B.singleton 0x1a
+    serialize ListAuthMechanisms = B.singleton 0x20
+    serialize StartAuth = B.singleton 0x21
+    serialize StepAuth = B.singleton 0x22
 
 instance Deserialize OpCode where
     deserialize = do
@@ -454,5 +486,8 @@ instance Deserialize OpCode where
         0x17 -> QuitQ
         0x18 -> FlushQ
         0x19 -> AppendQ
-        0x20 -> PrependQ
+        0x1a -> PrependQ
+        0x20 -> ListAuthMechanisms
+        0x21 -> StartAuth
+        0x22 -> StepAuth
 
