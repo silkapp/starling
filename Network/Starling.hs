@@ -89,7 +89,7 @@ import Data.Word
 import Data.Typeable
 import Control.Exception (Exception(..))
 
-import Control.Monad.Trans (liftIO, MonadIO)
+import Control.Monad.IO.Class (liftIO, MonadIO)
 
 import Control.Failure
 
@@ -105,29 +105,29 @@ instance Show StarlingError where
 instance Exception StarlingError
 
 -- | Set a value in the cache
-set :: (MonadIO m, MonadFailure StarlingError m)
+set :: (MonadIO m, Failure StarlingError m)
        => Connection -> Key -> Value -> m ()
 set con key value = simpleRequest con (Core.set key value) (const ())
 
 -- | Set a vlue in the cache. Fails if a value is already defined
 -- for the indicated key.
-add :: (MonadIO m, MonadFailure StarlingError m) =>
+add :: (MonadIO m, Failure StarlingError m) =>
        Connection -> Key -> Value -> m ()
 add con key value = simpleRequest con (Core.add key value) (const ())
 
 -- | Set a value in the cache. Fails if a value is not already defined
 -- for the indicated key.
-replace :: (MonadIO m, MonadFailure StarlingError m) =>
+replace :: (MonadIO m, Failure StarlingError m) =>
            Connection -> Key -> Value -> m ()
 replace con key value = simpleRequest con (Core.replace key value) (const ())
 
 -- | Retrive a value from the cache
-get :: (MonadIO m, MonadFailure StarlingError m) =>
+get :: (MonadIO m, Failure StarlingError m) =>
        Connection -> Key -> m ByteString
 get con key = simpleRequest con (Core.get key) rsBody
 
 -- | Delete an entry in the cache
-delete :: (MonadIO m, MonadFailure StarlingError m) =>
+delete :: (MonadIO m, Failure StarlingError m) =>
           Connection -> Key -> m ()
 delete con key = simpleRequest con (Core.delete key) (const ())
 
@@ -139,7 +139,7 @@ delete con key = simpleRequest con (Core.delete key) (const ())
 --
 -- Testing indicates that if we fail because we could not gaurantee
 -- atomicity the failure code will be 'KeyExists'.
-update :: (MonadIO m, MonadFailure StarlingError m) =>
+update :: (MonadIO m, Failure StarlingError m) =>
           Connection -> Key -> (Value -> m (Maybe Value)) -> m ()
 update con key f
     = do
@@ -160,7 +160,7 @@ update con key f
 -- amount by which to increment and the second is the intial value to
 -- use if the key does not yet have a value.
 -- The return value is the updated value in the cache.
-increment :: (MonadIO m, MonadFailure StarlingError m) =>
+increment :: (MonadIO m, Failure StarlingError m) =>
              Connection -> Key -> Word64 -> Word64 -> m Word64
 increment con key amount init
     = simpleRequest con (Core.increment key amount init) $ \response ->
@@ -170,18 +170,18 @@ increment con key amount init
 -- amount by which to decrement and the second is the intial value to
 -- use if the key does not yet have a value.
 -- The return value is the updated value in the cache.
-decrement :: (MonadIO m, MonadFailure StarlingError m) =>
+decrement :: (MonadIO m, Failure StarlingError m) =>
              Connection -> Key -> Word64 -> Word64 -> m Word64
 decrement con key amount init
     = simpleRequest con (Core.decrement key amount init) $ \response ->
       B.runGet B.getWord64be (rsBody response)
 
 -- | Delete all entries in the cache
-flush :: (MonadIO m, MonadFailure StarlingError m) =>
+flush :: (MonadIO m, Failure StarlingError m) =>
          Connection -> m ()
 flush con = simpleRequest con Core.flush (const ())
 
-simpleRequest :: (MonadIO m, MonadFailure StarlingError m) =>
+simpleRequest :: (MonadIO m, Failure StarlingError m) =>
                  Connection -> Request -> (Response -> a) -> m a
 simpleRequest con req f
     = do
@@ -193,7 +193,7 @@ simpleRequest con req f
 errorResult response = failure $ StarlingError (rsStatus response) (rsBody response)
 
 -- | Returns a list of stats about the server in key,value pairs
-stats :: (MonadIO m, MonadFailure StarlingError m) =>
+stats :: (MonadIO m, Failure StarlingError m) =>
          Connection -> m [(ByteString,ByteString)]
 stats con
     = do
@@ -213,13 +213,13 @@ stats con
 
 -- | Returns a single stat. Example: 'stat con "pid"' will return
 -- the 
-oneStat :: (MonadIO m, MonadFailure StarlingError m) =>
+oneStat :: (MonadIO m, Failure StarlingError m) =>
            Connection -> Key -> m ByteString
 oneStat con key = simpleRequest con (Core.stat $ Just key) rsBody
 
 -- | List allowed SASL mechanisms. The server must support SASL
 -- authentication.
-listAuthMechanisms :: (MonadIO m, MonadFailure StarlingError m) =>
+listAuthMechanisms :: (MonadIO m, Failure StarlingError m) =>
                       Connection -> m [AuthMechanism]
 listAuthMechanisms con
     = simpleRequest con Core.listAuthMechanisms (BS8.words . rsBody)
@@ -232,7 +232,7 @@ data AuthCallback m = AuthCallback (ByteString -> m (AuthData, Maybe (AuthCallba
 -- the passed-in AuthCallback. Returns 'True' if authentication is supported
 -- and complete. If the supplied callback completes while there are still steps
 -- remaining we throw FurtherAuthRequired.
-auth :: (MonadIO m, MonadFailure StarlingError m) =>
+auth :: (MonadIO m, Failure StarlingError m) =>
         Connection -> AuthMechanism -> AuthData -> Maybe (AuthCallback m) -> m Bool
 auth con mech auth authCallback
     = auth' Core.startAuth con mech auth authCallback
@@ -255,7 +255,7 @@ auth' req con mech auth authCallback = do
         
 
 -- | Returns the version of the server
-version :: (MonadIO m, MonadFailure StarlingError m) =>
+version :: (MonadIO m, Failure StarlingError m) =>
            Connection -> m ByteString
 version con = simpleRequest con Core.version rsBody
 
