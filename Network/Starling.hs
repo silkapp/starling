@@ -106,20 +106,20 @@ instance Exception StarlingError
 
 -- | Set a value in the cache
 set :: (MonadIO m, Failure StarlingError m)
-       => Connection -> Key -> Value -> m ()
-set con key value = simpleRequest con (Core.set key value) (const ())
+       => Connection -> Word32 -> Key -> Value -> m ()
+set con expiry key value = simpleRequest con (Core.set expiry key value) (const ())
 
 -- | Set a vlue in the cache. Fails if a value is already defined
 -- for the indicated key.
 add :: (MonadIO m, Failure StarlingError m) =>
-       Connection -> Key -> Value -> m ()
-add con key value = simpleRequest con (Core.add key value) (const ())
+       Connection -> Word32 -> Key -> Value -> m ()
+add con expiry key value = simpleRequest con (Core.add expiry key value) (const ())
 
 -- | Set a value in the cache. Fails if a value is not already defined
 -- for the indicated key.
 replace :: (MonadIO m, Failure StarlingError m) =>
-           Connection -> Key -> Value -> m ()
-replace con key value = simpleRequest con (Core.replace key value) (const ())
+           Connection -> Word32 -> Key -> Value -> m ()
+replace con expiry key value = simpleRequest con (Core.replace expiry key value) (const ())
 
 -- | Retrive a value from the cache
 get :: (MonadIO m, Failure StarlingError m) =>
@@ -140,8 +140,8 @@ delete con key = simpleRequest con (Core.delete key) (const ())
 -- Testing indicates that if we fail because we could not gaurantee
 -- atomicity the failure code will be 'KeyExists'.
 update :: (MonadIO m, Failure StarlingError m) =>
-          Connection -> Key -> (Value -> m (Maybe Value)) -> m ()
-update con key f
+          Connection -> Word32 -> Key -> (Value -> m (Maybe Value)) -> m ()
+update con expiry key f
     = do
   response <- liftIO $ synchRequest con (Core.get key)
   case rsStatus response of
@@ -151,7 +151,7 @@ update con key f
         res <- f oldVal
         let baseRequest = case res of
                             Nothing -> Core.delete key
-                            Just newVal -> Core.replace key newVal
+                            Just newVal -> Core.replace expiry key newVal
             request = addCAS cas $ baseRequest
         simpleRequest con request (const ())
     _ -> errorResult response

@@ -68,23 +68,23 @@ type Value = ByteString
 type ErrorInfo = ByteString
 
 -- | Set a value in the cache.
-set :: Key -> Value -> Request
-set key value
-    = let extras = setExtras 0 0
+set :: Word32 -> Key -> Value -> Request
+set expiry key value
+    = let extras = setExtras 0 expiry
       in request Set extras key value
 
 -- | Add a value to cache. Fails if
 -- already present.
-add :: Key -> Value -> Request
-add key value
-    = let extras = setExtras 0 0
+add :: Word32 -> Key -> Value -> Request
+add expiry key value
+    = let extras = setExtras 0 expiry
       in request Add extras key value
 
 -- | Replaces a value in cahce. Fails if
 -- not present.
-replace :: Key -> Value -> Request
-replace key value
-    = let extras = setExtras 0 0
+replace :: Word32 -> Key -> Value -> Request
+replace expiry key value
+    = let extras = setExtras 0 expiry
       in request Replace extras key value
 
 setExtras :: Word32 -> Word32 -> ByteString
