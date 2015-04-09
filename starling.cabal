@@ -1,5 +1,5 @@
 name:            starling
-version:         0.4.99.3
+version:         0.4.99.4
 stability:       Alpha
 
 synopsis:        A memcached client
